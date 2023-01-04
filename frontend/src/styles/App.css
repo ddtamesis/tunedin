@@ -134,6 +134,7 @@ body{
     height: 600px;
     padding: 20px 0;
     transition: all 0.5s ease;
+    overflow-y: scroll;
 }
 
 .wrapper .sidebar .profile{
@@ -161,6 +162,44 @@ body{
   width: 240px;
   height: 225px;
   opacity: var(--sidebar-mode)
+}
+
+.warningscreen{
+  position: absolute;
+  top: 110px;
+  left: 0;
+}
+
+.aboutustext{
+  position: absolute;
+  top: 10px;
+  left: 10px;
+}
+
+.aboutusinfo{
+  position: absolute;
+  top: 200px;
+  left: 400px;
+}
+
+.wrapper .sidebar .defaultbar .defaultbardescriptors{
+  display: block;
+  position: relative;
+  top: 460px;
+  right:0px;
+  width: 240px;
+  height: 225px;
+  opacity: var(--sidebar-mode)
+}
+
+.wrapper .sidebar .userbar .parameterdescriptors{
+  display: block;
+  position: relative;
+  top: 500px;
+  right:0px;
+  width: 240px;
+  height: 225px;
+  opacity: calc(1 - var(--sidebar-mode))
 }
 
 .wrapper .sidebar .userbar h2{
@@ -231,8 +270,33 @@ body{
   transition: all 0.5s ease;
 }
 
+.bottomtext{
+  padding: 15px;
+  text-indent: 30px;
+  text-align: left;
+}
+
 .wrapper .svgwindow{
   background: rgb(95, 163, 223);
+}
+
+.wrapper .fixedscreenbutton{
+  position: absolute;
+  top: 110px;
+  left: 0;
+}
+
+.wrapper .fixedscreengradient{
+  position: absolute;
+  top: 220px;
+  left: 0;
+}
+
+.wrapper .bubblecontainer{
+  width: 100%;
+  height: 600px;
+  overflow-x: scroll;
+  overflow-y: scroll;
 }
 
 .google-button {
@@ -284,13 +348,19 @@ rect {
   stroke:rgb(0,0,0)
 }
 
-.wrapper .svgwindow .whitetext{
+.whitetext{
   /* font: italic 40px serif; */
       font: normal 20px helvetica;
       fill: rgb(255, 255, 255);
 }
 
-.wrapper .svgwindow .whitetextbig{
+.whitetext2{
+  /* font: italic 40px serif; */
+      font: normal 15px helvetica;
+      fill: rgb(255, 255, 255);
+}
+
+.whitetextbig{
   /* font: italic 40px serif; */
       font: normal 50px helvetica;
       fill: rgb(255, 255, 255);

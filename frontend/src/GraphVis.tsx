@@ -9,11 +9,11 @@ import { initializeApp } from 'firebase/app';
 import { domainToASCII } from 'url';
 import { match } from 'assert';
 
-// Number of mocked users to display. Can go up to 1000 without significant slowdowns.
-let maxnum = 150;
+// x-center of the svg window coordinates
+let centerx = 700;
 
-// x-center of the svg window
-let centerx = 600;
+// y-center of the svg window coordinates
+let centery = 250;
 
 // The radius of the filtering circle around each point 
 // that is used to cut down on how many repulsive forces we must calculate
@@ -119,6 +119,7 @@ export function linsort(pt: Array<number>, SortParameterIndex: number, loggedin:
     // it wasn't worth creating an entire React myRef variable for something this subtle.
     const maxwidth = 400;
     let x = pt[1];
+    let y = 200-(400*getdata(pt[0],SortParameterIndex, usersongparams))
     if(pt[0] < 0){
         return [-1,-1000,-1000]
     }
@@ -133,7 +134,14 @@ export function linsort(pt: Array<number>, SortParameterIndex: number, loggedin:
     if(loggedin && pt[0] == curruser){
         x = 1;
     }
-    return [pt[0], x,300-(600*getdata(pt[0],SortParameterIndex, usersongparams))] //trying to do it with 0 y instead of pt[2]
+    if(y < -200){
+        y = -200
+    }
+    else if(y > 200){
+        y = 200
+    }
+
+    return [pt[0], x,y] //trying to do it with 0 y instead of pt[2]
 }
 
 // Simple boilerplate function for fetching the paramindex'th song data value of the userindex'th user.
@@ -275,7 +283,7 @@ export function renderstroke(showselected: boolean, datanum: number){
     }
 }
 
-// Tau is always useful! We use it in our useEffect loop to make our points pulse on screen via a sine function.
+// Tau is always useful! We use it to make our points pulse on screen via a sine function.
 const tau = 2*Math.PI;
 
 // A function that returns the number of digits in a number(base 10). Used for determining the size of the text box needed to
@@ -328,7 +336,7 @@ export function slidenum(bool: boolean){
 
 // Another simple function for determining whether or not we should display the sidebar.
 // Only returns "sidebar" element class name when the current google user ID passed in is nonempty.
-function sidebarloggedin(str: string, spotifylinked: boolean): string{
+export function sidebarloggedin(str: string, spotifylinked: boolean): string{
     if (str != "" && spotifylinked){
         return "sidebar";
     }
@@ -337,7 +345,7 @@ function sidebarloggedin(str: string, spotifylinked: boolean): string{
 
 // A nearly identical function used for showing and hiding sidebar elements based on whether or not we've logged in to spotify.
 // Takes in the success class name as a parameter since we use this on two elements with different class names.
-function fullyloggedin(bool: boolean, classname: string): string{
+export function fullyloggedin(bool: boolean, classname: string): string{
     if(bool){
         return classname
     }
@@ -347,7 +355,7 @@ function fullyloggedin(bool: boolean, classname: string): string{
 }
 
 // A function that returns some number of periods based on the current value of the global animation timer
-function dots(Timer: number): string{
+export function dots(Timer: number): string{
     if(Timer<1/3){
         return "."
     }
@@ -357,16 +365,22 @@ function dots(Timer: number): string{
     return "..."
 }
 
-
+// A simple function that takes in a string and replaces the end of the string with "..."
+// if the string has more than "len" characters.
+export function textbuff(str: string, len: number): string{
+    if(str == undefined){
+        return "STRING UNDEFINED"
+    }
+    else if (str.length < len){
+        return str
+    }
+    return str.slice(0,len) + "..."
+}
 
 // Our main rendering function. Returns everything below the header in our app.
-// Takes in the current google user ID and whether or not spotify is linked, as these affect which elements are rendered.
 
 // Here's an outline of the general structure of this function since it's so large:
-// -State variables
-// -UseEffect main loop
-// -Other variables
-// Huuuuge return statement:
+// -Loading screen
 // -Main wrapper
 //      -Sidebar wrapper
 //          -Default sidebar(zoomed out state)
@@ -379,18 +393,6 @@ function dots(Timer: number): string{
 //          -On-screen buttons(change parameter to sort by, zoom out)
 //      -Developer tool buttons
 
-// A map from a user's number/index to the numerical data of their last listened to last song, in the following order:
-// Acousticness, Danceability, Energy, Instrumentalness, Speechiness, Valence
-// export let usersongparams: Map<number, Array<number>> = new Map<number, Array<number>>();
-
-// A map from a user's number/index to their string data, in the following order:
-// Username, name of most recently listened to song, artist of most recently listened to song
-// export let userdatastrings: Map<number, Array<string>> = new Map<number, Array<string>>();
-
-// The current user's top 5 user matches, in the following order:
-// Current top 5 matches, All time top 5 matches
-// export let matchesdata: Map<number, Array<Array<number>>> = new Map<number, Array<Array<number>>>();
-
 export default function GraphVis(CurrentGoogleUser: string, spotifyLinked: boolean, usersloaded: boolean, fetchingusers: boolean, 
     usersongparams: Map<number, Array<number>>, userdatastrings: Map<number, Array<string>>,
     matchesdata: Map<number,Array<Array<number>>>, Timer: number, userIDs: Array<string>, 
@@ -399,20 +401,10 @@ export default function GraphVis(CurrentGoogleUser: string, spotifyLinked: boole
     Setalltime: ((bool: boolean)=>void), setSelectIndex: ((num: number)=>void), Setzoomed: ((bool: boolean)=> void), 
     setSortParameter: ((num: number)=>void), setSortIndex: ((num: number)=>void)) {
 
-    // All of our wonderful react state variables
-    const [ShowCircLabels, SetShowCircLabels] = useState<boolean>(true);
+    // An especially long aria label string I moved up here
     const SELECTEDUSERSONGSTRING: string = getdatastrings(SelectIndex,0, userdatastrings) + " is listening to " + getdatastrings(SelectIndex,1, userdatastrings) + "by " + getdatastrings(SelectIndex,2, userdatastrings)
 
-    //Ok there's some weird stuff going on with userIDs now
-
-    //What is the best way to go about this? You will probably have to set usersloaded and fetchingusers to be false again
-    //The question is, where do we do this? And how do we make sure it doesn't happen twice in a row?
-    //It seems like it would be best to move this loop of loading and fetching users to the main app loop.
-    //
-
-    // Main useEffect loop! Had to use a setInterval to stop React from reaching its max update depth and freaking out.
-
-    // Main return statement
+    // If users haven't been loaded yet, or we have no user ids in our array, display a loading screen
     if (!usersloaded || userIDs.length == 0){
         return <div key = "wrapper" className = "wrapper">
             <svg className="svgwindow" fill = "true"
@@ -422,7 +414,7 @@ export default function GraphVis(CurrentGoogleUser: string, spotifyLinked: boole
                         return <circle 
                         key= {"loadcircle_"+num.toString()} 
                         cx= {700} cy= {300} 
-                        r={4*(40+5*num + 2*Math.sin(tau*Timer+(num*tau/4)))} 
+                        r={4*(40+5*num + 2*Math.sin(2*tau*Timer+(num*tau/4)))} 
                         fill="none"
                         stroke = "hsla(0 100% 100%)"
                         strokeWidth = "1"
@@ -431,21 +423,20 @@ export default function GraphVis(CurrentGoogleUser: string, spotifyLinked: boole
                         }
                     )}
                 <text key = {"loadingtext"} className = "whitetextbig" x= "600" y= "314" aria-label="Loading..."> 
-                {"Loading"+ dots((3*Timer)%1)} 
+                {"Loading"+ dots((6*Timer)%1)} 
                 </text>
             </svg>
         </div>
     }
+    // Otherwise, display our main app window
     else{
-        // console.log(userIDs)
-        // console.log(CircleData)
         return <div key = "wrapper" className = "wrapper">
                 {/* Sidebar background */}
-                <div key = "sidebardiv" className = {sidebarloggedin(CurrentGoogleUser,spotifyLinked)}>
+                <div key = "sidebardiv" className = {sidebarloggedin(CurrentGoogleUser,spotifyLinked)} aria-label = {sidebarloggedin(CurrentGoogleUser,spotifyLinked)}>
                     {/* defaultbar, aka zoomed out sidebar panel */}
                     <div key = "defaultbar" className = {fullyloggedin(spotifyLinked,"defaultbar")} aria-label="user sidebar for displaying your current matches">
                         <h3 aria-label={"Welcome, " + getdatastrings(curruser,0, userdatastrings) + "!"}>
-                            {"Welcome, " + getdatastrings(curruser,0, userdatastrings) + "!"}
+                            {"Welcome, " + textbuff(getdatastrings(curruser,0, userdatastrings),25) + "!"}
                             </h3>
                         <h2 aria-label="Who's on your wavelength?">Who's on your wavelength?</h2>
                         {/* lovely wave logo made in Desmos */}
@@ -509,7 +500,7 @@ export default function GraphVis(CurrentGoogleUser: string, spotifyLinked: boole
                                     ry="5"
                                     opacity = {(zoomval).toString()}
                                     onClick= {() => {  
-                                        setSelectIndex(getdatamatches(SelectIndex, alltime, matchindex, matchesdata))
+                                        setSelectIndex(getdatamatches(curruser, alltime, matchindex, matchesdata))
                                         Setzoomed(true)
                                     }}>
                                     </rect>
@@ -522,23 +513,29 @@ export default function GraphVis(CurrentGoogleUser: string, spotifyLinked: boole
                                     y= {(75+70*x2).toString()}
                                     opacity = {(zoomval).toString()}
                                     onClick= {() => {  
-                                        setSelectIndex(getdatamatches(SelectIndex, alltime, matchindex,matchesdata))
+                                        setSelectIndex(getdatamatches(curruser, alltime, matchindex,matchesdata))
                                         Setzoomed(true)
                                     }}
-                                    aria-label={"Match " + x2 + ": " + getdatastrings(getdatamatches(SelectIndex, alltime, matchindex, matchesdata),0, userdatastrings)}
+                                    aria-label={"Match " + x2 + ": " + getdatastrings(getdatamatches(curruser, alltime, matchindex, matchesdata),0, userdatastrings)}
                                     >
-                                    {getdatastrings(getdatamatches(SelectIndex, alltime, matchindex, matchesdata),0, userdatastrings)}
+                                    {textbuff(getdatastrings(getdatamatches(curruser, alltime, matchindex, matchesdata),0, userdatastrings),15)}
                                     </text>
                                 })}
                             </svg>
+                        <div className= {fullyloggedin(!zoomed,"defaultbardescriptors")}>
+                            <p className = "bottomtext">Tunedin uses your historical song data to find the top five users who match your music taste the most.
+                            These matches are calculated from the six parameters Spotify's API provides for a song: 
+                            Acousticness, Energy, Danceability, Instrumentalness, Speechiness, and Valence.
+                            </p>
+                        </div>
                     </div>
                     {/* userbar, aka zoomed in sidebar panel */}  
                     <div key = "userbar" className={fullyloggedin(zoomed,"userbar")} aria-label = "sidebar for viewing a selected user's current song statistics">
                         {/* main song string info */}
-                        <p aria-label={SELECTEDUSERSONGSTRING}>{getdatastrings(SelectIndex,0, userdatastrings)}</p>
+                        <p aria-label={SELECTEDUSERSONGSTRING}>{textbuff(getdatastrings(SelectIndex,0, userdatastrings),24)}</p>
                         <p aria-label={SELECTEDUSERSONGSTRING}>{"is listening to"}</p>
-                        <h2 aria-label={SELECTEDUSERSONGSTRING}>{getdatastrings(SelectIndex,1, userdatastrings)}</h2>
-                        <h3 aria-label={SELECTEDUSERSONGSTRING}>{"by " + getdatastrings(SelectIndex,2, userdatastrings)}</h3>
+                        <h2 aria-label={SELECTEDUSERSONGSTRING}>{textbuff(getdatastrings(SelectIndex,1, userdatastrings),18)}</h2>
+                        <h3 aria-label={SELECTEDUSERSONGSTRING}>{"by " + textbuff(getdatastrings(SelectIndex,2, userdatastrings),16)}</h3>
                         {/* song data value display */}
                         <svg id="paramdisplay" className = "paramdisplay" width = "100%" height = "500">
                             {[0,1,2,3,4,5].map((x)=>{
@@ -578,145 +575,171 @@ export default function GraphVis(CurrentGoogleUser: string, spotifyLinked: boole
                                 Math.round(getdata(SelectIndex,x, usersongparams)*100) + "percent"}> {getparamname(x)+":"} </text>
                             })}
                         </svg>
+                        <div className= {fullyloggedin(zoomed,"parameterdescriptors")}>
+                            <p>Scroll for more info on these parameters!</p>
+                            <p>Acousticness: This parameter measures how acoustic a user's song is. For example, a heavy metal song with a jarring baseline might score lower than a classical guitar cover.</p>
+                            <p>Danceability: This parameter measures how suited a user's song is for dancing. For example, a hip hop or pop song with a steady beat might score higher than a slow-moving ballad.</p>
+                            <p>Energy: This parameter measures how energetic a user's song is. Loud and fast paced music tends to score higher on this scale.</p> 
+                            <p>Instrumentalness: This parameter measures Spotify's certainty that a song contains no vocals. A Bach concerto will score high on this scale, while lyrical music often scores quite low.</p>
+                            <p>Valence: This parameter measures how happy or cheerful a song sounds, regardless of the actual content of the lyrics.</p>
+                            <br></br>
+                        </div>
                     </div>
                 </div>
                 {/* user bubble display */}
-                <svg className="svgwindow" fill = "true"
-                 width="100%" height="600" >
-                    {/* current user outline circles */}
-                    {[0,1,2,3].map((num) => 
-                        {if (spotifyLinked){
-                        return <circle 
-                        key= {"usercircleoutline_"+num.toString()} 
-                        cx= {camcenter[0]*(CircleData[curruser][1]-camcenter[1])+centerx} cy= {camcenter[0]*(CircleData[curruser][2]-camcenter[2])+300} 
-                        r={camcenter[0]*(20+10*num) + 4*Math.sin(0.1*CircleData[curruser][0]+tau*Timer)} 
-                        fill="none"
-                        stroke = "hsla(0 100% 100%)"
-                        strokeWidth = "1"
-                        >
-                        </circle>
-                        }}
-                    )}
-                    {/* selected user outline circles */}
-                    {[0,1].map((num) => 
-                        {
-                        return <circle 
-                        key= {"selectedcircleoutline_"+num.toString()} 
-                        cx= {camcenter[0]*(CircleData[SelectIndex][1]-camcenter[1])+centerx} cy= {camcenter[0]*(CircleData[SelectIndex][2]-camcenter[2])+300} 
-                        r={camcenter[0]*20 + 20 + 20*num + 10*Math.sin(0.1*CircleData[curruser][0]+tau*Timer)} 
-                        fill="none"
-                        stroke = {renderstroke(zoomed,getdata(SelectIndex,SortParameter, usersongparams))}
-                        strokeWidth = "2"
-                        >
-                        </circle>
+                <div className = "bubblecontainer">
+                    <svg className="svgwindow" fill = "true"
+                    width="1600" height="800" >
+                        {/* current user outline circles */}
+                        {[0,1,2,3].map((num) => 
+                            {if (spotifyLinked){
+                            return <circle 
+                            key= {"usercircleoutline_"+num.toString()} 
+                            cx= {camcenter[0]*(CircleData[curruser][1]-camcenter[1])+centerx} cy= {camcenter[0]*(CircleData[curruser][2]-camcenter[2])+centery} 
+                            r={camcenter[0]*(20+10*num) + 4*Math.sin(0.1*CircleData[curruser][0]+tau*Timer)} 
+                            fill="none"
+                            stroke = "hsla(0 100% 100%)"
+                            strokeWidth = "1"
+                            >
+                            </circle>
+                            }}
+                        )}
+                        {/* selected user outline circles */}
+                        {[0,1].map((num) => 
+                            {
+                            return <circle 
+                            key= {"selectedcircleoutline_"+num.toString()} 
+                            cx= {camcenter[0]*(CircleData[SelectIndex][1]-camcenter[1])+centerx} cy= {camcenter[0]*(CircleData[SelectIndex][2]-camcenter[2])+centery} 
+                            r={camcenter[0]*20 + 20 + 20*num + 10*Math.sin(0.1*CircleData[curruser][0]+tau*Timer)} 
+                            fill="none"
+                            stroke = {renderstroke(zoomed,getdata(SelectIndex,SortParameter, usersongparams))}
+                            strokeWidth = "2"
+                            >
+                            </circle>
+                            }
+                        )}
+                        {/* all user bubbles */}
+                        {CircleData.map((entry) => {
+                            if (Number.isNaN(entry[1])){
+                                return null
+                            }
+                            else{
+                            return <circle 
+                            key= {entry[0]} 
+                            className = {entry[0].toString()} 
+                            cx= {camcenter[0]*(entry[1]-camcenter[1])+centerx} cy= {camcenter[0]*(entry[2]-camcenter[2])+centery} 
+                            r={camcenter[0]*20 + 4*Math.sin(0.1*entry[0]+tau*Timer)} fill={"hsla(" + 200+90*getdata(entry[0],SortParameter, usersongparams) + ", 50%, 50%, 1)"}
+                            stroke = "none"
+                            strokeWidth = "5"
+                            onClick= {() => {
+                                Setzoomed(true);
+                                console.log("circle " + entry[0] + " clicked");
+                                setSelectIndex(entry[0])
+                            }}
+                            />
                         }
-                    )}
-                    {/* all user bubbles */}
-                    {CircleData.map((entry) => {
-                        if (Number.isNaN(entry[1])){
-                            return null
-                        }
-                        else{
-                        return <circle 
-                        key= {entry[0]} 
-                        className = {entry[0].toString()} 
-                        cx= {camcenter[0]*(entry[1]-camcenter[1])+centerx} cy= {camcenter[0]*(entry[2]-camcenter[2])+300} 
-                        r={camcenter[0]*20 + 4*Math.sin(0.1*entry[0]+tau*Timer)} fill={"hsla(" + 200+90*getdata(entry[0],SortParameter, usersongparams) + ", 50%, 50%, 1)"}
-                        stroke = "none"
-                        strokeWidth = "5"
-                        onClick= {() => {
-                            Setzoomed(true);
-                            console.log("circle " + entry[0] + " clicked");
-                            setSelectIndex(entry[0])
-                        }}
-                        />
-                    }
 
+                        })}
+                        {/* username tags for displayed bubbles */}
+                        {CircleData.map((entry) => 
+                            { return (<text 
+                                    key = {"username_"+entry[0].toString()}
+                                    x={camcenter[0]*(entry[1]-24-camcenter[1])+centerx} 
+                                    y={camcenter[0]*(entry[2]-24-camcenter[2])+centery} 
+                                    fontSize={camcenter[0]*10}
+                            className="small"
+                            onClick= {() => {
+                                console.log("circle " + entry[0] + " clicked");
+                                setSelectIndex(entry[0])
+                            }} >
+                            {getdatastrings(entry[0],0, userdatastrings)}</text>)}
+                        )}
+                    </svg>
+                </div>
+                <svg className="fixedscreenbutton" width = {(140+9*getparamname(SortParameter).length+15).toString()} height = "160">
+                            {/* button for changing the parameter we sort by */}
+                        {<rect 
+                            key = "paramsortbutton"
+                            width = {(140+9*getparamname(SortParameter).length).toString()}
+                            height = "50"
+                            x= "10"
+                            y= "10"
+                            rx="5"
+                            ry="5"
+                            onClick= {() => {  
+                                // change the parameter sorting mode
+                                setSortParameter((SortParameter + 1) % parameternames.size);
+                            }}
+                            aria-label = {"Currently sorting users by: " + getparamname(SortParameter) + ". Click to change the sorting method."}
+                            >
+                            </rect>}
+                            {<text 
+                            key = "paramsorttext"
+                            className = "whitetext"
+                            x= "20"
+                            y= "42"
+                            onClick= {() => {  
+                                // change the parameter sorting mode
+                                setSortParameter((SortParameter + 1) % parameternames.size);
+                            }}
+                            aria-label = {"Currently sorting users by: " + getparamname(SortParameter) + ". Click to change the sorting method."}
+                            >
+                                {"Sorting by: " + getparamname(SortParameter)}
+                            </text>}
+                        {/* button for zooming the camera out after we've clicked a bubble */}
+                        {<rect 
+                            key = "zoomoutbutton"
+                            width = "150"
+                            height = "50"
+                            x= "10"
+                            y= "70"
+                            rx="5"
+                            ry="5"
+                            opacity = {camcenter[0]-1.1}
+                            onClick= {() => {  
+                                Setzoomed(false);
+                            }}
+                            aria-label = "Click to zoom out"
+                            >
+                            </rect>}
+                            {<text 
+                            key = "zoomouttext"
+                            className = "whitetext"
+                            x= "42"
+                            y= "102"
+                            opacity = {camcenter[0]-1.1}
+                            onClick= {() => {  
+                                Setzoomed(false);
+                            }}
+                            aria-label = "Click to zoom out"
+                            >
+                                Zoom out
+                            </text>}
+                    <text 
+                        key = {getparamname(SortParameter) + " level"}
+                        className = "whitetext2"
+                        x= "10"
+                        y= "145"
+                        >
+                            {getparamname(SortParameter) + " level:"}
+                    </text>
+                </svg>
+                <svg className="fixedscreengradient" width = "75" height = "480">
+                    {[0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0].map((x)=> 
+                        {return <text 
+                        key = {"decimal notch " + x}
+                        className = "whitetext2"
+                        x= "35"
+                        y= {65 + 410*(1-x)}
+                        >
+                            {x}
+                        </text>
                     })}
-                    {/* username tags for displayed bubbles */}
-                    {CircleData.map((entry) => 
-                        {if(ShowCircLabels){
-                            return (<text 
-                                key = {"username_"+entry[0].toString()}
-                                x={camcenter[0]*(entry[1]-24-camcenter[1])+centerx} 
-                                y={camcenter[0]*(entry[2]-24-camcenter[2])+300} 
-                                fontSize={camcenter[0]*10}
-                        className="small"
-                        onClick= {() => {
-                            console.log("circle " + entry[0] + " clicked");
-                            setSelectIndex(entry[0])
-                        }} >
-                        {getdatastrings(entry[0],0, userdatastrings)}</text>)}}
-                    )}
-                    {/* button for changing the parameter we sort by */}
-                    {<rect 
-                        key = "paramsortbutton"
-                        width = {(140+9*getparamname(SortParameter).length).toString()}
-                        height = "50"
-                        x= "10"
-                        y= "10"
-                        rx="5"
-                        ry="5"
-                        onClick= {() => {  
-                            // change the parameter sorting mode
-                            setSortParameter((SortParameter + 1) % parameternames.size);
-                        }}
-                        aria-label = {"Currently sorting users by: " + getparamname(SortParameter) + ". Click to change the sorting method."}
-                        >
-                        </rect>}
-                        {<text 
-                        key = "paramsorttext"
-                        className = "whitetext"
-                        x= "20"
-                        y= "42"
-                        onClick= {() => {  
-                            // change the parameter sorting mode
-                            setSortParameter((SortParameter + 1) % parameternames.size);
-                        }}
-                        aria-label = {"Currently sorting users by: " + getparamname(SortParameter) + ". Click to change the sorting method."}
-                        >
-                            {"Sorting by: " + getparamname(SortParameter)}
-                        </text>}
-                    {/* button for zooming the camera out after we've clicked a bubble */}
-                    {<rect 
-                        key = "zoomoutbutton"
-                        width = "150"
-                        height = "50"
-                        x= "10"
-                        y= "70"
-                        rx="5"
-                        ry="5"
-                        opacity = {camcenter[0]-1.1}
-                        onClick= {() => {  
-                            Setzoomed(false);
-                        }}
-                        aria-label = "Click to zoom out"
-                        >
-                        </rect>}
-                        {<text 
-                        key = "zoomouttext"
-                        className = "whitetext"
-                        x= "42"
-                        y= "102"
-                        opacity = {camcenter[0]-1.1}
-                        onClick= {() => {  
-                            Setzoomed(false);
-                        }}
-                        aria-label = "Click to zoom out"
-                        >
-                            Zoom out
-                        </text>}
-                        <image className= "gradient" height = "450" y = "130" href = "https://i.ibb.co/8cN6FXd/transpgradbar.png"/>
+                    <image className= "gradient" height = "450" y = "40" href = "https://i.ibb.co/8cN6FXd/transpgradbar.png"/>
                 </svg>
                 {/* misc. developer tools. Kept for debugging purposes, nothing here is dangerous or alters the actual data,
                  which is why I've simply hidden it instead of omitting it completely via some boolean function */}
                 <div key = "developer stuff" className = "hidden">
-                    <button onClick= {() => {  
-                        // Toggle usernames on and off
-                        SetShowCircLabels(!ShowCircLabels);
-                    }}>
-                        {"Toggle Circle Labels"}
-                    </button>
                     {/* Note: We can't change the size of the circdata array, react won't allow it */}
                     <button onClick= {() => {  
                             // Change the sorting style between linear and radial, or some other sorting function if we decide to add more.

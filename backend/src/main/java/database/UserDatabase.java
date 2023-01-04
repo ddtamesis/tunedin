@@ -3,6 +3,7 @@ package database;
 import java.util.List;
 import user.User;
 
+/** Extensible UserDatabase interface */
 public interface UserDatabase {
 
   User getUser(String userId);
@@ -11,7 +12,7 @@ public interface UserDatabase {
 
   List<String> getAllUserIds();
 
-//  void deleteUser(User user);
-//
-//  void registerUser(User user);
+  //  void deleteUser(User user);
+  //
+  //  void registerUser(User user);
 }
